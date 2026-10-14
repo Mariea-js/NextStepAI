@@ -1,7 +1,6 @@
-import ipaddress
+import asyncio
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -17,12 +16,11 @@ from app.source_fetcher import SourceFetchError, _validate_public_url
     "http://[::1]/",
     "https://user:pass@example.com/",
 ])
-@pytest.mark.asyncio
-async def test_unsafe_urls_rejected(url):
+def test_unsafe_urls_rejected(url):
     with pytest.raises(SourceFetchError):
-        await _validate_public_url(url)
+        asyncio.run(_validate_public_url(url))
 
 
 @pytest.mark.asyncio
-async def test_public_ip_allowed():
-    await _validate_public_url("https://8.8.8.8/resource")
+def test_public_ip_allowed():
+    asyncio.run(_validate_public_url("https://8.8.8.8/resource"))

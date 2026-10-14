@@ -28,3 +28,10 @@ Member A's `/match` response supplies `source_url` from the same normalized oppo
 ## Security and accuracy boundaries
 
 Source URLs originate from the matching dataset and must be treated as untrusted input. Do not deploy the fetcher to an unrestricted network without URL allowlisting, redirect/IP safeguards, and request-size limits. The service is a capstone prototype, not a verified source of current scholarship deadlines or official eligibility decisions. Retrieved text can be stale or incomplete. The LLM receives source excerpts as untrusted data and cannot modify matching scores.
+
+
+## Personalized roadmap behavior (prototype)
+
+The frontend response now retains up to three opportunity-specific actions per eligible recommendation, adds evidence-extracted document steps and dataset deadline reminders, and surfaces eligibility mismatches from high-ranked partial matches even when eligible matches exist. It conditionally flags language-test and publication mentions found in requirement-like retrieved sentences. These mentions are **review prompts**, not verified requirements or proof that a student lacks a qualification. Publication history is not currently captured by the student profile, so publication readiness cannot be assessed reliably. Deadline strings are dataset records, not live-verified dates.
+
+This is a conservative improvement, not a complete scholarship-specific requirements parser. Reliable gap detection requires structured official requirements, profile fields for test scores/publications/research experience, and evidence-backed verification of each requirement. The current hash embeddings limit semantic retrieval quality.

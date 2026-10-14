@@ -1,8 +1,8 @@
 # NextStep AI 2.0 — Product Vision and Architecture Proposal
 
-**Status:** Design draft — four product decisions confirmed; remaining questions pending approval.  
+**Status:** Design draft — product behavior confirmed; implementation details and acceptance fixtures pending.  
 **Branch:** `design/nextstep-advisor-v2`  
-**Scope:** Design and documentation only. No application code changes are authorized on this branch yet.
+**Scope:** Design and documentation only. No application code changes are authorized on this branch yet. The latest clarified decisions in Section 14 take precedence if earlier draft wording conflicts.
 
 ## 1. Product vision
 
@@ -19,7 +19,7 @@ NextStep AI should evolve from a scholarship discovery and deterministic matchin
 
 ### Three readiness outcomes (roadmaps for all selected opportunities)
 - **Ready to apply:** show document preparation, official application steps, verified deadlines and a practical sequence.
-- **Promising but needs work:** for backend-Eligible opportunities, explain evidence-backed gaps and preparation actions. For Partial Match opportunities, display the existing match explanation without a full roadmap.
+- **Promising but needs work:** for backend-Eligible opportunities, explain evidence-backed gaps and preparation actions. For selected Partial Match opportunities, provide a realistic gap-to-eligibility roadmap explaining unmet criteria and feasible improvements.
 - **Not currently eligible:** Retain the existing matching status and failure reasons. If selected among the top three, provide a realistic barrier assessment and improvement or alternative-path roadmap; never promise that structural restrictions can be fixed.
 
 A numerical fit score is **not** an eligibility probability. An official requirement should never be invented, and an LLM must not overwrite deterministic results.
@@ -177,3 +177,35 @@ This document records decisions and recommendations only. **Do not edit applicat
 **Progress and deployment:** Save task completion locally in the browser; no cross-device synchronization and no hosting requirement for the initial phase. Preserve the existing matching backend and working UI behavior.
 
 **Outstanding design details before coding:** choose exact fields and validation, clarify how 'potential' is ranked within Partial Match / Not Eligible groups, decide which official sources count as current-cycle verified, and select model/cost constraints and end-to-end acceptance fixtures. No code implementation authorized yet.
+
+## 14. Confirmed user-facing behavior and engineering review (2026-10-15)
+
+### Selection and truthful recommendations
+- Return **up to three** recommendations, with Eligible first. If fewer than three Eligible results exist, fill remaining places with **promising, realistically improvable Partial Match** results. Do not recommend Not Eligible scholarships merely to fill three slots. If no credible matches exist, display a respectful no-suitable-opportunities explanation and invite profile updates.
+- A selected Partial Match receives a specific **gap-to-eligibility roadmap**: the failing rule, evidence from the official source where accessible, whether it can realistically be improved, and actionable next steps. Completed-degree CGPA, nationality or fixed residency restrictions must not be portrayed as quickly fixable. An IELTS score improvement may be feasible, but must not be guaranteed.
+- If the existing backend says Eligible but an official mandatory condition is unmet, retain the backend score/status and show a **prominent, separate readiness warning**. Do not say that an applicant can safely apply despite an unresolved mandatory blocker. Distinguish required fixes, optional competitive enhancements, and unknown information.
+
+### Official-source RAG requirements
+- For each shortlisted opportunity, fetch its official scholarship page and follow relevant official linked pages/documents for eligibility, application steps, required documents, language tests and **current-cycle deadlines**. Do not assume a single homepage contains all rules. Respect link scope, crawl limits, rate limits, PDF limitations and inaccessible content; do not claim complete coverage when not achieved.
+- Extract requirement text with precise source URL and supporting excerpt. Classify each criterion as mandatory, preferred, optional, unclear or not found. Compare the criterion with the student's supplied profile; never infer failure from an unknown field. An LLM may draft explanations and questions but must not invent evidence, thresholds or eligibility.
+- Only display an actual deadline date if verified from the current-cycle official source. Otherwise display **'Deadline not verified — please check the official scholarship page'**. The scholarship's existing official link is sufficient; no redundant link is required in every roadmap step.
+- If official retrieval fails (permissions, anti-bot restriction, timeout, parsing failure or other unknown cause), report **'Official requirements could not be verified automatically'**, rather than assuming a permissions error. Preserve clearly labeled dataset matching results, invite the student to consult the official page, and avoid source-specific claims.
+
+### Frontend and progress
+- Preserve existing layout and matching experience. Improve only comprehensive intake and the existing roadmap/assessment area with clear **Strengths**, **Requirements and gaps**, **Readiness warning**, **Roadmap**, **Deadline verification** and **Source evidence** sections.
+- Unknown optional intake fields must not block matching. Store only task completion state in browser local storage, using stable identifiers; do not persist sensitive profile details unnecessarily. No hosting or account sync required for initial local testing.
+
+### Existing code facts confirmed by read-only review of main branch
+- `frontend/src/api.js` sends `POST /analyze` directly to the RAG FastAPI service and `POST /match` to the matching service; it also contains an independent client-side matching fallback with **different** scoring/eligibility behavior. The fallback must never be presented as authoritative verification.
+- `ai-rag/app/main.py` exposes `POST /analyze` with a `StudentProfile` request. `ai-rag/app/member_a_client.py` calls the matching service's `POST /match`. `ai-rag/app/service.py` currently calls `top_three_eligible` and retrieves only three evidence chunks per selected eligible opportunity; this must change to support the approved mixed shortlist and broader official requirements.
+- The RAG service receives scholarship source URLs in matching results and fetches them. **There is no confirmed direct RAG read of a separately stored student-profile database** in the reviewed request path; profile data is passed in the API request. Do not design against an assumed profile database until one is verified.
+- The frontend contains guessed deadline placeholders, heuristic document lists, and estimated financial figures. In the enhanced advisory UI, do not present those as officially verified scholarship facts. Preserve unrelated UI flows, but distinguish legacy estimates from evidence-backed findings.
+
+### Engineering decisions still required before implementation
+1. Define comprehensive optional intake fields, normalization, validation and backward-compatible `/analyze` request/response schema.
+2. Specify the **fixability policy** for Partial Match blockers and what constitutes a promising candidate; no automatic promises of eligibility.
+3. Define official link-following scope, source verification/freshness, extraction fallback, request limits and caching. Some pages may be inaccessible or dynamically rendered.
+4. Select local embedding/LLM provider configuration and acceptable latency/cost; create acceptance fixtures for eligible, fixable partial, structural blocker, official-page failure and deadline change.
+5. Maintain the previous security/roadmap draft PR as separate work; do not silently merge it into this design branch.
+
+**Implementation approval gate remains in force.**

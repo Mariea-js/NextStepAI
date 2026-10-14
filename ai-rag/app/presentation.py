@@ -146,18 +146,81 @@ def _partial_matches(analysis: AnalysisResponse) -> list[PartialMatchPresentatio
 
 
 def _application_roadmap(analysis: AnalysisResponse) -> list[ApplicationRoadmapPresentation]:
-    roadmap = []
-    for priority, rec in enumerate(analysis.recommendations[:3], start=1):
-        if rec.document_checklist.status == 'available':
-            action = 'Confirm the current requirements and begin preparing the listed application documents.'
-        else:
-            action = 'Confirm the current eligibility requirements and begin preparing your application.'
-        roadmap.append(ApplicationRoadmapPresentation(priority=priority, scholarship=rec.name, action=action))
-    if not roadmap and analysis.gaps:
-        for priority, gap in enumerate(analysis.gaps[:3], start=1):
-            roadmap.append(ApplicationRoadmapPresentation(priority=priority, scholarship='Profile improvement', action=gap.recommended_action))
-    return roadmap
+    """Expose evidence-backed actions and gaps, not generic one-line placeholders.
 
+    Only retrieved evidence can establish opportunity-specific requirements.
+    Missing profile fields are requests for clarification, not failed eligibility.
+    """
+    roadmap: list[ApplicationRoadmapPresentation] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(scholarship: str, action: str) -> None:
+        action = action.strip()
+        key = (scholarship, action.casefold())
+        if action and key not in seen and len(roadmap) < 15:
+            seen.add(key)
+            roadmap.append(ApplicationRoadmapPresentation(
+                priority=len(roadmap) + 1, scholarship=scholarship, action=action,
+            ))
+
+    profile = analysis.profile
+    for rec in analysis.recommendations[:3]:
+        # The per-scholarship LLM actions already passed through the evidence
+        # pipeline. Show them instead of replacing them with generic prose.
+        for action in rec.actions[:3]:
+            add(rec.name, action)
+        if rec.document_checklist.status == 'available':
+            add(rec.name, 'Prepare the documents identified in retrieved official requirements: '
+                + ', '.join(rec.document_checklist.items) + '.')
+        if rec.deadline:
+            add(rec.name, f'Check the official application portal for the current deadline (dataset records: {rec.deadline}); plan document preparation accordingly.')
+        else:
+            add(rec.name, 'Check the official portal for the current application window; no verified deadline is available in the matching data.')
+
+        # Do not infer that an English test or publication is required merely
+        # because the student has not supplied one. Look for explicit language
+        # in retrieved requirement sentences before proposing gap actions.
+        for item in rec.evidence:
+            for sentence in re.split(r'(?<=[.!?])\\s+', item.excerpt):
+                lower = sentence.lower()
+                requirement = bool(re.search(r'\\b(required?|must|mandatory|eligibility|applicants? need|minimum)\\b', lower))
+                if not requirement:
+                    continue
+                if re.search(r'\\b(ielts|toefl|english.language|language proficiency)\\b', lower):
+                    status = (profile.english_test_status or '').strip().lower() if profile else ''
+                    if not status or status in ('no', 'none', 'not taken', 'not yet', 'pending'):
+                        add(rec.name, 'Official source mentions a language requirement. Confirm its accepted tests and minimum scores; your profile does not show a completed test.')
+                if re.search(r'\\b(publications?|published research|research papers?)\\b', lower):
+                    add(rec.name, 'Official source mentions research publications. Check the exact requirement and compare it with your research record; publication history was not collected in the intake profile.')
+
+    # Preserve eligibility reasons and avoid implying that a high fit score
+    # overrides a hard requirement.
+    partials = sorted(
+        (m for m in analysis.match_results if m.eligibility_status == 'Partial Match'),
+        key=lambda m: m.total_score, reverse=True,
+    )[:3]
+    for match in partials:
+        for reason in match.reasons_failed[:2]:
+            action = action_for_reason(reason)
+            if action:
+                add(match.name, f'Eligibility gap: {reason}. Next step: {action[0]}')
+            else:
+                add(match.name, f'Eligibility mismatch: {reason}. Verify whether this requirement can be satisfied; do not assume eligibility from the fit score.')
+        if match.source_url:
+            add(match.name, 'Review the official scholarship requirements before investing time in an application.')
+
+    # Missing profile fields are uncertainty, not proof of ineligibility.
+    for gap in analysis.gaps[:3]:
+        if gap.criterion == 'English test status':
+            add('Profile readiness', 'Your language-test status is unknown. Check whether your shortlisted scholarships require a test before booking one.')
+        elif gap.criterion == 'Budget':
+            add('Profile readiness', 'Provide your available study budget to assess funding shortfalls; no exact funding gap can be calculated without it.')
+        elif not gap.criterion.startswith('Partial Match:'):
+            add('Profile readiness', gap.recommended_action)
+
+    if not roadmap:
+        add('Profile readiness', 'Review official eligibility requirements, confirm current deadlines, and update missing profile details before applying.')
+    return roadmap
 
 def format_analysis_response(analysis: AnalysisResponse) -> FrontendAnalysisResponse:
     """Convert the internal pipeline result into the stable frontend contract."""

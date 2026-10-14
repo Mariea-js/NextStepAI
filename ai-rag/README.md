@@ -2,7 +2,7 @@
 
 Run Member A from `backend/`, then from this directory install `requirements.txt` and run `uvicorn app.main:app --reload --port 8001`. POST a `StudentProfile` to `/analyze`.
 
-Copy `.env.example` to `.env` and place the real Gemini credential in `ai-rag/.env` as `GEMINI_API_KEY=...`. Never commit that file. `HashEmbeddingService` is a deterministic offline development/test provider; production should replace it with a semantic `EmbeddingService` implementation configured by `EMBEDDING_PROVIDER`.
+Copy `.env.example` to `.env` and place the real Gemini credential in `ai-rag/.env` as `GEMINI_API_KEY=...`. Never commit that file. `HashEmbeddingService` is a deterministic offline development/test provider; the currently wired service also uses it; no semantic provider is configured. Production retrieval would need a real semantic embedding implementation and evaluation.
 
 The service never changes Member A. It calls `/match`, retains its complete result set, and only selects `Eligible` rows for the MVP Top 3. Scores and eligibility remain separate response fields from AI prose and retrieved evidence.
 
@@ -23,3 +23,15 @@ Actions are requested from Gemini as opportunity-specific, evidence- and score-g
 Member A's `/match` response supplies `source_url` from the same normalized opportunity it evaluated. Member B does not read Member A's workbook. Shared URLs are fetched once per ingestion operation but chunk metadata is stamped with an opportunity ID; retrieval enforces that ID and active source version, so shared hub-page chunks cannot cross into another opportunity's evidence.
 
 `ChromaVectorStore` uses persistent Chroma when available at `CHROMA_PATH`, while retaining an in-memory fallback for zero-service tests. No Chroma API leaks above this layer.
+
+
+## Security and accuracy boundaries
+
+Source URLs originate from the matching dataset and must be treated as untrusted input. Do not deploy the fetcher to an unrestricted network without URL allowlisting, redirect/IP safeguards, and request-size limits. The service is a capstone prototype, not a verified source of current scholarship deadlines or official eligibility decisions. Retrieved text can be stale or incomplete. The LLM receives source excerpts as untrusted data and cannot modify matching scores.
+
+
+## Personalized roadmap behavior (prototype)
+
+The frontend response now retains up to three opportunity-specific actions per eligible recommendation, adds evidence-extracted document steps and dataset deadline reminders, and surfaces eligibility mismatches from high-ranked partial matches even when eligible matches exist. It conditionally flags language-test and publication mentions found in requirement-like retrieved sentences. These mentions are **review prompts**, not verified requirements or proof that a student lacks a qualification. Publication history is not currently captured by the student profile, so publication readiness cannot be assessed reliably. Deadline strings are dataset records, not live-verified dates.
+
+This is a conservative improvement, not a complete scholarship-specific requirements parser. Reliable gap detection requires structured official requirements, profile fields for test scores/publications/research experience, and evidence-backed verification of each requirement. The current hash embeddings limit semantic retrieval quality.

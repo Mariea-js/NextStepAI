@@ -20,7 +20,7 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / '.env')
 app=FastAPI(title='NextStep AI - Evidence Layer')
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['*'],
+    allow_origins=[origin.strip() for origin in os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(',') if origin.strip()],
     allow_methods=['*'],
     allow_headers=['*'],
 )
@@ -30,7 +30,7 @@ logger.setLevel(logging.INFO)
 def get_service():
  timeout = float(os.getenv('GEMINI_TIMEOUT_SECONDS', '30'))
  retry_delay = float(os.getenv('GEMINI_RETRY_DELAY_SECONDS', '0.5'))
- return AnalysisService(MemberAClient(os.getenv('MEMBER_A_BASE_URL','http://127.0.0.1:8000')),SourceFetcher(),SourceRegistry(os.getenv('SOURCE_REGISTRY_PATH','./.source_registry.sqlite3')),ChromaVectorStore(os.getenv('CHROMA_PATH','./.chroma')),HashEmbeddingService(),GeminiClient(os.getenv('GEMINI_API_KEY',''),os.getenv('LLM_MODEL','gemini-3.6-flash'), timeout_seconds=timeout, retry_delay_seconds=retry_delay, max_retries=1))
+ return AnalysisService(MemberAClient(os.getenv('MEMBER_A_BASE_URL','http://127.0.0.1:8000')),SourceFetcher(),SourceRegistry(os.getenv('SOURCE_REGISTRY_PATH','./.source_registry.sqlite3')),ChromaVectorStore(os.getenv('CHROMA_PATH','./.chroma')),HashEmbeddingService(),GeminiClient(os.getenv('GEMINI_API_KEY',''),os.getenv('LLM_MODEL','gemini-2.0-flash'), timeout_seconds=timeout, retry_delay_seconds=retry_delay, max_retries=1))
 @app.get('/')
 def root(): return {'status':'NextStep AI evidence layer is running'}
 @app.post('/analyze', response_model=FrontendAnalysisResponse)

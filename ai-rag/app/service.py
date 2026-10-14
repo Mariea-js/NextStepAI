@@ -128,7 +128,7 @@ class AnalysisService:
             else:
                 from .retriever import Retriever
                 retrieve_started = perf_counter()
-                evidence = Retriever(self.store, self.embeddings, self.registry).retrieve(match.opportunity_id, match.name + ' eligibility application funding documents', 3)
+                evidence = Retriever(self.store, self.embeddings, self.registry).retrieve(match.opportunity_id, match.name + ' eligibility requirements IELTS TOEFL English proficiency publications academic qualifications application documents deadlines', 6)
                 logger.info('timing stage=evidence_retrieval opportunity=%s duration_ms=%.1f chunks=%s', match.opportunity_id, (perf_counter() - retrieve_started) * 1000, len(evidence))
                 if not evidence:
                     limitations.append(f'Insufficient retrieved evidence for {match.name}; no source-specific details are asserted.')

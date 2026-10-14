@@ -1,6 +1,6 @@
 # NextStep AI 2.0 — Product Vision and Architecture Proposal
 
-**Status:** Discussion draft — awaiting product-owner approval.  
+**Status:** Design draft — four product decisions confirmed; remaining questions pending approval.  
 **Branch:** `design/nextstep-advisor-v2`  
 **Scope:** Design and documentation only. No application code changes are authorized on this branch yet.
 
@@ -17,10 +17,10 @@ NextStep AI should evolve from a scholarship discovery and deterministic matchin
 6. An advisory layer synthesizes readiness, prioritizes actionable gaps, and generates a realistic scholarship-specific roadmap.
 7. The frontend shows opportunities, supporting evidence, readiness details, deadlines and progress-tracked actions. A student can update profile details and rerun the assessment.
 
-### Three outcomes
+### Three readiness outcomes (roadmaps only for backend-Eligible opportunities)
 - **Ready to apply:** show document preparation, official application steps, verified deadlines and a practical sequence.
-- **Promising but needs work:** explain the specific evidence-backed gaps, achievable improvements and timelines.
-- **Not currently eligible:** distinguish fixable blockers from non-fixable restrictions and suggest alternative or future-intake planning.
+- **Promising but needs work:** for backend-Eligible opportunities, explain evidence-backed gaps and preparation actions. For Partial Match opportunities, display the existing match explanation without a full roadmap.
+- **Not currently eligible:** retain the existing matching status and failure reasons; no scholarship-specific roadmap for Partial Match or Not Eligible results.
 
 A numerical fit score is **not** an eligibility probability. An official requirement should never be invented, and an LLM must not overwrite deterministic results.
 
@@ -35,7 +35,7 @@ A numerical fit score is **not** an eligibility probability. An official require
 ## 3. Proposed component architecture
 
 ```text
-Student intake (existing + optional readiness fields)
+Comprehensive student intake (existing required + additional readiness fields)
          |
          v
 Existing FastAPI rule-based /match  [UNCHANGED]
@@ -56,7 +56,7 @@ Structured requirement extraction (source-linked JSON)
 Profile / requirement comparison (deterministic, explainable)
          |
          v
-Roadmap planner (prioritized actions, dates, blockers, unknowns)
+Roadmap planner (backend-Eligible only; verified dates or undated actions)
          |
          v
 Grounded LLM wording + output validation + conservative fallback
@@ -67,7 +67,7 @@ Frontend: scholarship readiness / gaps / evidence / roadmap
 
 ## 4. Profile information
 
-Keep existing mandatory intake fields compatible with the current matching API. Consider **optional**, explicitly labeled additions:
+**Confirmed: comprehensive intake.** Keep existing mandatory intake fields and /match request compatible; collect additional fields in a versioned advisory profile passed to RAG. New fields should be optional where unknown is a valid answer, with explicit 'not provided' states:
 - Language test type, overall score, subscores, completion status and expiry.
 - Highest qualification, academic grading scale and current enrollment/completion status.
 - Research experience, publication count and optional descriptions (not a substitute for verifying publication requirements).
@@ -91,14 +91,14 @@ Do not let a generated requirement become an authoritative eligibility gate with
 
 ## 6. Roadmap response contract (proposal)
 
-For each opportunity:
+For each **backend-Eligible opportunity selected for the roadmap**:
 - Current deterministic match status and score, unchanged.
 - Independent **readiness assessment**, with explicit limitations and verified/unverified flags.
 - Strengths, unmet requirements, missing profile details, and structural restrictions.
-- Prioritized actions: `title`, `why`, `category`, `priority`, `estimated_effort`, `dependency`, `target_date`, `source_url`, `evidence_excerpt`, `status`.
+- Prioritized actions: `title`, `why`, `category`, `priority`, `dependency`, `target_date` (only when verified), `source_url`, `evidence_excerpt`, `status`. Undated tasks are valid; do not invent duration estimates.
 - Documents explicitly required by the official source; separately label general preparation suggestions.
-- Deadline and date provenance: source-confirmed vs dataset-only vs unknown; never calculate a fabricated deadline.
-- Next-best actions when not eligible and an honest warning when a blocker cannot realistically be fixed for the current cycle.
+- Deadline and date provenance: source-confirmed vs unverified. Display calendar dates **only when verified from an official source**; otherwise show 'Deadline not verified' and keep roadmap actions undated. Dataset-only dates must not be presented as confirmed dates.
+- If official evidence reveals a mandatory requirement not met by an otherwise backend-Eligible applicant, show an explicit **readiness warning** and do not imply verified eligibility. Do not change the backend's status. For backend Partial Match / Not Eligible opportunities, preserve existing explanations but generate no new roadmap.
 
 **Example:** If an official scholarship page explicitly requires IELTS 6.5 and the profile contains no language score, mark the language criterion `missing_information`, ask the applicant to provide an existing score or plan a test, and include a preparation step without claiming the student has failed the requirement. If publications are explicitly mandatory and the student reports none, identify the gap; do not assume a publication can be obtained before the deadline.
 
@@ -110,7 +110,7 @@ For each opportunity:
 4. **Retrieval:** use requirement-specific queries, opportunity-ID filtering, source-version filtering, and consider hybrid lexical + semantic retrieval for numeric thresholds and dates.
 5. **Structured extraction:** constrained JSON output, evidence-span validation, no unsupported requirement generation.
 6. **Comparison:** deterministic category-specific checks; uncertainty for ambiguous thresholds and missing fields.
-7. **Planning:** grounded actions with deadlines only when verifiable, priorities and dependencies.
+7. **Planning:** generate roadmaps only for backend-Eligible opportunities, with grounded actions and source-verified calendar dates; leave undated actions undated.
 8. **Presentation:** structured validated response; safe deterministic fallback when LLM or sources are unavailable.
 9. **Observability:** measure fetch/extract/retrieve/generate latency and failures without logging personal profile secrets.
 10. **Evaluation:** golden applicant/source cases, citation support, requirement recall/precision, gap correctness, no-hallucination tests, latency and end-to-end UI behavior.
@@ -125,7 +125,7 @@ For each opportunity:
 
 **Phase D — Roadmap engine:** create opportunity-specific steps, sequencing, verified date handling, conditional improvements and conservative fallback.
 
-**Phase E — Frontend integration:** add optional intake fields, readiness/gap panels and actionable roadmap UI while preserving existing matching/dashboard functionality.
+**Phase E — Frontend integration:** add comprehensive intake fields, readiness/gap panels for backend-Eligible opportunities and actionable roadmap UI with browser-local progress state; preserve existing matching/dashboard functionality.
 
 **Phase F — Verification:** unit/integration tests, adversarial source tests, manual end-to-end acceptance, latency/cost review and deployment guidance. Merge only after review.
 
@@ -134,21 +134,32 @@ For each opportunity:
 - Strong applicants receive concrete evidence-grounded application preparation steps, not generic placeholders.
 - Applicants missing language information are not automatically labeled ineligible; official requirements are surfaced with evidence.
 - Publication or research requirements are only asserted when supported by official sources.
-- Partial or non-eligible cases show actual blockers and distinguish fixable versus structural mismatches.
-- The UI displays roadmap actions even when eligible opportunities also exist.
-- Every claimed deadline is marked as source-confirmed, dataset-only or unknown.
+- Partial or non-eligible cases retain their existing eligibility results and mismatch explanations, but do not receive a new full roadmap.
+- The UI displays evidence-backed roadmap actions for backend-Eligible opportunities, including readiness warnings and profile gaps discovered by RAG.
+- Calendar deadlines and target dates are displayed only with official-source verification; otherwise show 'Deadline not verified' and undated tasks.
 - No AI response modifies backend score, rank or eligibility.
 - The existing matching engine and unrelated frontend flows continue working.
+- Roadmap progress is stored locally in the browser, namespaced by opportunity and action identity; no account system or server-side progress persistence is introduced.
 - Graceful behavior when evidence, embeddings, Gemini or backend services are unavailable.
 - Automated regression tests and realistic end-to-end examples pass.
 
-## 10. Decisions to confirm before coding
+## 10. Confirmed product decisions (2026-10-14)
 
-1. Should the roadmap cover only the top three eligible opportunities, or also a configurable number of high-fit partial/not-eligible opportunities?
-2. Which optional intake fields are essential in the first release (language scores, publications, experience, documents)?
-3. Should timelines be strictly date-driven when a source-confirmed deadline exists, or include explicitly labeled approximate preparation durations otherwise?
-4. Should students be able to mark tasks complete and save progress locally, without adding accounts?
-5. What are the acceptable model/API cost, response latency, and deployment constraints?
-6. Which three real scholarship examples and student profiles should be our acceptance-test cases?
+1. **Coverage: Eligible only.** The new advisory roadmap is produced only for opportunities the existing backend marks `Eligible`. Partial Match and Not Eligible opportunities remain visible in existing results with their recorded reasons, but no full roadmap.
+2. **Intake: Comprehensive.** Add a detailed student readiness profile without breaking the existing `/match` schema. Additional fields are forwarded to the RAG advisory layer.
+3. **Timelines: Verified only.** Dates must be explicitly supported by current official-source evidence. No invented calendar dates, estimated completion dates, or unverified dataset dates shown as verified. When no verified deadline exists, show `Deadline not verified` and undated preparation actions.
+4. **Progress: Local.** Use browser `localStorage` to save roadmap completion status; no accounts or cloud sync.
 
-**Approval gate:** This document is a proposal, not authorization to change frontend/backend/RAG code. Reconcile these decisions and approve the specification before implementation.
+## 11. Remaining decisions before implementation
+
+1. **Coverage cap:** Does 'eligible only' mean all eligible opportunities or only the top three currently selected by the RAG service? **Recommendation:** top three, to control retrieval latency and API cost.
+2. **RAG readiness warnings:** If the backend says Eligible but official evidence reveals an unmet mandatory condition, should the UI show `Needs verification / Not application-ready` while preserving backend Eligible? **Recommendation:** yes.
+3. **Comprehensive profile details:** Approve the proposed categories (language tests/scores, academic scale and qualifications, publications, research/experience, documents, target intake, constraints). Decide whether students may choose `unknown` for every new field. **Recommendation:** yes; do not block matching on incomplete optional details.
+4. **Date verification policy:** Does a deadline need to appear on the scholarship's official site or official linked PDF, and what freshness window should count as current? **Recommendation:** official source only; retain retrieval timestamp and avoid presenting an undated or stale cycle as current.
+5. **Progress privacy:** Browser-local progress disappears when storage is cleared and does not sync across devices. Is that acceptable? **Recommendation:** yes for this prototype, with a visible notice.
+6. **Model and deployment constraints:** Confirm acceptable API spend, latency, and whether free-tier hosting must be supported. These affect semantic embeddings, caching, and source retrieval.
+7. **Acceptance fixtures:** Select at least three official scholarships with representative profiles: ready, missing language information, and unmet mandatory requirement. Test evidence citation and failure behavior.
+
+## 12. Approval gate
+
+This document records decisions and recommendations only. **Do not edit application code until the user reviews the remaining decisions and explicitly authorizes implementation.** The previous security/roadmap draft PR remains separate and is not automatically included in this design branch.

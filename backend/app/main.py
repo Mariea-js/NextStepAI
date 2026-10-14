@@ -11,7 +11,9 @@ Then open http://127.0.0.1:8000/docs for an interactive test page
 that FastAPI builds automatically from this file.
 """
 
-from fastapi import FastAPI
+import os
+import secrets
+from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from .models import StudentProfile, MatchResult
@@ -51,7 +53,13 @@ def match_student(student: StudentProfile):
     return get_matches(student)
 
 
-@app.post("/admin/refresh-data")
+def require_admin_key(x_admin_key: str | None = Header(default=None)):
+    configured = os.getenv("NEXTSTEP_ADMIN_KEY")
+    if not configured or not x_admin_key or not secrets.compare_digest(x_admin_key, configured):
+        raise HTTPException(status_code=403, detail="Administrative access denied")
+
+
+@app.post("/admin/refresh-data", dependencies=[Depends(require_admin_key)])
 def refresh_data():
     """
     Call this after the spreadsheet has been updated with new
